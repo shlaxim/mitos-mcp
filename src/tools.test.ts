@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractLegalBasis } from "./tools.js";
-import type { ExtendedResponse } from "./mitos.js";
+import { extractLegalBasis, filterByTitle } from "./tools.js";
+import type { ExtendedResponse, ServiceListItem } from "./mitos.js";
 
 const fixture: ExtendedResponse = {
   success: true,
@@ -54,9 +54,6 @@ test("extractLegalBasis handles missing process_rules", () => {
   const out = extractLegalBasis("1", empty);
   assert.deepEqual(out.rules, []);
 });
-
-import { filterByTitle } from "./tools.js";
-import type { ServiceListItem } from "./mitos.js";
 
 const services: ServiceListItem[] = [
   { id: "1", title: { el: "Φορολογία πολιτών", en: "Citizen taxation" }, ns: "", last_updated: "" },

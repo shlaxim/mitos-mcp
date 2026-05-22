@@ -1,6 +1,7 @@
 import {
   normalize,
   FETCH_CONCURRENCY,
+  CACHE_TTL_MS,
   fetchAllServices,
   getExtended,
   pool,
@@ -158,7 +159,8 @@ export async function getProcedure(id: string): Promise<string> {
   const altTitles = arr(proc?.alternative_titles) as string[] | undefined;
   if (altTitles) lines.push(`**Also known as:** ${altTitles.join(", ")}`);
   lines.push(`**ID:** ${id}`);
-  lines.push(`**URL:** ${str(d.url) ?? `https://id.mitos.gov.gr/${id}`}`);
+  const url = str(d.url);
+  if (url) lines.push(`**URL:** ${url}`);
   lines.push(`**Last updated:** ${str(d.last_updated) ?? "N/A"}`);
 
   // Responsible organisation
@@ -267,7 +269,7 @@ export async function getProcedure(id: string): Promise<string> {
   if (digitalSteps) {
     lines.push("## Digital Process Steps");
     for (const step of digitalSteps) {
-      const num = step.step_digital_num_id;
+      const num = step.step_digital_num_id ?? "";
       const t = str(step.step_digital_title) ?? "";
       const d2 = str(step.step_digital_description);
       const exit = step.step_digital_exit ? " [EXIT]" : "";
@@ -359,13 +361,6 @@ export async function getProcedure(id: string): Promise<string> {
 
 const SAMPLE_SIZE = 150;
 
-interface CategoriesCache {
-  categories: string[];
-  fetchedAt: number;
-}
-let categoriesCache: CategoriesCache | null = null;
-const CACHE_TTL_MS = 60 * 60 * 1000;
-
 /**
  * Evenly-spread sample across the full services list, keeping each source item
  * paired with its extended response (the extended body does NOT reliably include
@@ -375,7 +370,11 @@ interface SampledItem {
   item: ServiceListItem;
   ext: ExtendedResponse;
 }
+let sampledItemsCache: { items: SampledItem[]; fetchedAt: number } | null = null;
+
 async function sampleExtended(): Promise<SampledItem[]> {
+  if (sampledItemsCache && Date.now() - sampledItemsCache.fetchedAt < CACHE_TTL_MS)
+    return sampledItemsCache.items;
   const all = await fetchAllServices();
   const step = Math.max(1, Math.floor(all.length / SAMPLE_SIZE));
   const sample = all.filter((_, i) => i % step === 0).slice(0, SAMPLE_SIZE);
@@ -388,6 +387,7 @@ async function sampleExtended(): Promise<SampledItem[]> {
     const r = results[i];
     if (r.status === "fulfilled" && r.value.success) out.push({ item: sample[i], ext: r.value });
   }
+  sampledItemsCache = { items: out, fetchedAt: Date.now() };
   return out;
 }
 
@@ -399,16 +399,11 @@ function lifeEventsOf(ext: ExtendedResponse): string[] {
 }
 
 export async function listCategories(): Promise<string> {
-  if (categoriesCache && Date.now() - categoriesCache.fetchedAt < CACHE_TTL_MS) {
-    const c = categoriesCache.categories;
-    return `${c.length} life event categories:\n\n` + c.map((x) => `• ${x}`).join("\n");
-  }
   const samples = await sampleExtended();
   const set = new Set<string>();
   for (const s of samples) lifeEventsOf(s.ext).forEach((e) => set.add(e));
   if (set.size === 0) return "No categories found.";
   const sorted = [...set].sort((a, b) => a.localeCompare(b, "el"));
-  categoriesCache = { categories: sorted, fetchedAt: Date.now() };
   return (
     `${sorted.length} life event categories (sampled from ${samples.length} procedures):\n\n` +
     sorted.map((c) => `• ${c}`).join("\n")
@@ -511,24 +506,27 @@ export const toolDefinitions = [
 export async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
     case "search_procedures": {
-      const query = (args.query as string) ?? "";
+      const query = typeof args.query === "string" ? args.query : "";
       if (!query.trim()) throw new Error("query must not be empty");
-      return searchProcedures(query, (args.language as string) ?? "both", args.category as string | undefined);
+      const language = typeof args.language === "string" ? args.language : "both";
+      const category = typeof args.category === "string" ? args.category : undefined;
+      return searchProcedures(query, language, category);
     }
     case "get_procedure": {
-      const id = (args.id as string) ?? "";
+      const id = typeof args.id === "string" ? args.id : "";
       if (!id.trim()) throw new Error("id must not be empty");
       return getProcedure(id);
     }
     case "list_categories":
       return listCategories();
     case "list_procedures_by_category": {
-      const category = (args.category as string) ?? "";
+      const category = typeof args.category === "string" ? args.category : "";
       if (!category.trim()) throw new Error("category must not be empty");
-      return listProceduresByCategory(category, (args.limit as number) ?? 50);
+      const limit = typeof args.limit === "number" ? args.limit : 50;
+      return listProceduresByCategory(category, limit);
     }
     case "get_legal_basis_articles": {
-      const id = (args.procedure_id as string) ?? "";
+      const id = typeof args.procedure_id === "string" ? args.procedure_id : "";
       if (!id.trim()) throw new Error("procedure_id must not be empty");
       return getLegalBasisArticles(id);
     }
