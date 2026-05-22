@@ -84,6 +84,7 @@ API → deploy to VPS → connect from Claude for Word.
    - `npm run build` → dist/ compiled successfully.
    - `npm test` → **13/13 unit tests pass** (normalize, formatDuration, pool, extractLegalBasis, filterByTitle).
    - `npm run smoke` → **6/6 live smoke checks pass** (health, 401 rejection, tools/list, search_procedures, get_legal_basis_articles ×2).
+   - Merged to `master` 2026-05-22 as commit `341be7a` (`feat/http-rewrite`, 16 commits, branch deleted). Re-verified on merged master: 13/13 tests + 6/6 smoke.
 
 **Remaining open item:** VPS deploy + connect from Claude for Word.
 - Clone repo on Ubuntu/Hostinger VPS, `docker compose up -d --build`.
