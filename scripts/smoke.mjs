@@ -55,9 +55,10 @@ check("search_procedures returns text", typeof search.content?.[0]?.text === "st
 
 // 5. get_legal_basis_articles returns valid JSON with rules
 const legal = await rpc("tools/call", { name: "get_legal_basis_articles", arguments: { procedure_id: "439993" } }, 3);
-const parsed = JSON.parse(legal.content[0].text);
-check("get_legal_basis_articles returns rules array", Array.isArray(parsed.rules) && parsed.rules.length > 0);
-check("legal rule has rule_type", typeof parsed.rules[0].rule_type === "string");
+let parsed;
+try { parsed = JSON.parse(legal.content[0].text); } catch { parsed = null; }
+check("get_legal_basis_articles returns rules array", Array.isArray(parsed?.rules) && parsed.rules.length > 0);
+check("legal rule has rule_type", typeof parsed?.rules?.[0]?.rule_type === "string");
 
 console.log(`\n${ok} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

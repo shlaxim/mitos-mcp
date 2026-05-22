@@ -19,6 +19,11 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  process.stderr.write(`FATAL: PORT must be 1-65535, got: ${process.env.PORT}\n`);
+  process.exit(1);
+}
+
 function tokenValid(header: string | undefined): boolean {
   if (!header?.startsWith("Bearer ")) return false;
   const provided = Buffer.from(header.slice(7));
@@ -48,7 +53,16 @@ function buildServer(): Server {
 }
 
 const app = express();
-app.use(express.json());
+app.disable("x-powered-by");
+app.use(express.json({ limit: "100kb" }));
+
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err && typeof err === "object" && (err as { type?: string }).type === "entity.parse.failed") {
+    res.status(400).json({ error: "Bad request" });
+    return;
+  }
+  next(err as Error);
+});
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
