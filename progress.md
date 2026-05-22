@@ -87,9 +87,13 @@ API → deploy to VPS → connect from Claude for Word.
    - Merged to `master` 2026-05-22 as commit `341be7a` (`feat/http-rewrite`, 16 commits, branch deleted). Re-verified on merged master: 13/13 tests + 6/6 smoke.
 
 **Remaining open item:** VPS deploy + connect from Claude for Word.
-- Clone repo on Ubuntu/Hostinger VPS, `docker compose up -d --build`.
-- Install nginx + certbot, copy nginx.conf.example, run `certbot --nginx -d mitos.<domain>`.
-- Add custom connector in Claude for Word: URL `https://mitos.<domain>/mcp`, header `Authorization: Bearer <token>`.
+- GitHub: `https://github.com/shlaxim/mitos-mcp` (private, pushed 2026-05-22).
+- Domain: `nomothiki.com` (Hostinger). Target hostname: **mitos.nomothiki.com**.
+- Full tailored runbook: **`DEPLOY.md`** (DNS A record → VPS IP, Docker install, private-repo
+  clone via `gh`, `.env` with token, `docker compose up -d --build`, nginx + certbot, connector).
+- Hardening: docker-compose binds 8743 to `127.0.0.1` only (nginx proxies over HTTPS).
+- Auth token was generated 2026-05-22 (stored by user, NOT in repo — lives in VPS `.env`).
+- Connector: URL `https://mitos.nomothiki.com/mcp`, header `Authorization: Bearer <token>`.
 
 ## VERIFIED `process_rules` shape (LIVE 2026-05-22, 264 rules across 58 procedures)
 Each rule in `metadata.process_rules[]` is flat with these keys:
