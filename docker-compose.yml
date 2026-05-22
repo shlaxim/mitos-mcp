@@ -1,0 +1,9 @@
+services:
+  mitos-mcp:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8743:8743"
+    environment:
+      MITOS_MCP_AUTH_TOKEN: ${MITOS_MCP_AUTH_TOKEN:?set MITOS_MCP_AUTH_TOKEN}
+      PORT: "8743"
