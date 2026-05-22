@@ -1,176 +1,182 @@
-# Deploying mitos-mcp to a Hostinger VPS (mitos.nomothiki.com)
+# Deploying mitos-mcp (as actually deployed to the Hostinger VPS)
 
-Concrete runbook for this setup:
-- **Repo:** `https://github.com/shlaxim/mitos-mcp` (private)
-- **Hostname:** `mitos.nomothiki.com`
-- **VPS:** Hostinger VPS (Ubuntu), root SSH
-- **Endpoint exposed:** `https://mitos.nomothiki.com/mcp` (+ open `GET /health`)
+This reflects the **real** deployment of `mitos.nomothiki.com`, not an idealized
+fresh-server plan. The VPS already ran a **system nginx + Docker + certbot**
+(serving `nomothiki.cloud`), so we added our app *beside* the existing setup
+rather than installing anything that conflicts.
 
-Replace `<YOUR_TOKEN>` everywhere with the auth token you generated (keep it secret).
-Replace `<VPS_PUBLIC_IP>` with your VPS's IPv4 address (shown in the Hostinger panel).
+**Live setup:**
+- App: container on `127.0.0.1:8743`, code at `/opt/mitos-mcp`
+- Public URL: `https://mitos.nomothiki.com/mcp/<token>` (path-secret auth)
+- Repo: `https://github.com/shlaxim/mitos-mcp` (public)
+- VPS: Hostinger Ubuntu 24.04, real public IP **`76.13.155.182`**
 
----
-
-## Step 1 — DNS (Hostinger panel, ~5 min + propagation)
-
-In Hostinger → your domain `nomothiki.com` → **DNS / Name Servers** → manage DNS records, add:
-
-| Type | Name    | Points to        | TTL  |
-|------|---------|------------------|------|
-| A    | `mitos` | `<VPS_PUBLIC_IP>`| 3600 |
-
-This creates `mitos.nomothiki.com`. Wait for propagation, then verify from your PC:
-
-```powershell
-nslookup mitos.nomothiki.com
-```
-
-It must resolve to `<VPS_PUBLIC_IP>` before doing Let's Encrypt (Step 6).
+Use this as the template for redeploying or for a sibling MCP on the same box.
 
 ---
 
-## Step 2 — SSH into the VPS
+## Step 0 — Get a shell on the VPS
 
-```powershell
-ssh root@<VPS_PUBLIC_IP>
-```
+Outbound SSH (port 22) is blocked from the user's network, so SSH from a normal
+terminal times out. Use **Hostinger panel → VPS → Browser terminal** (web console,
+logs in as root). All VPS commands below run there.
 
-(Hostinger shows the root password / lets you set an SSH key in the VPS panel.)
-
-All remaining steps run **on the VPS**.
+> **Browser-terminal paste caveat:** long single-line commands get soft-wrapped into
+> broken multi-line input. Prefer **many short lines** (e.g. several `echo '...' >> file`)
+> over heredocs or one long `printf`.
 
 ---
 
-## Step 3 — Install Docker + compose plugin (Ubuntu)
+## Step 1 — Confirm the VPS's REAL public IP
+
+Do **not** trust the IP shown in the Hostinger panel — for this box it showed a
+parking IP (`2.57.91.91`) that is *not* where traffic to the VPS lands. Get the
+true egress/public IP from the box itself:
 
 ```bash
-apt-get update && apt-get install -y ca-certificates curl git
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-chmod a+r /etc/apt/keyrings/docker.asc
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
-  > /etc/apt/sources.list.d/docker.list
-apt-get update
-apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-docker --version && docker compose version
+curl -s https://api.ipify.org; echo
 ```
+
+That printed `76.13.155.182`. Use **that** value for DNS.
 
 ---
 
-## Step 4 — Get the code (private repo)
+## Step 2 — DNS (Hostinger DNS panel for the domain)
 
-The repo is **private**, so cloning needs GitHub credentials. Easiest is the GitHub CLI device login:
+Add/point an `A` record at the **real** IP:
+
+| Type | Name    | Points to        | TTL |
+|------|---------|------------------|-----|
+| A    | `mitos` | `76.13.155.182`  | 60  |
+
+Verify the authoritative answer and a couple of public resolvers:
 
 ```bash
-apt-get install -y gh
-gh auth login        # choose GitHub.com → HTTPS → "Login with a web browser", enter the one-time code
-gh repo clone shlaxim/mitos-mcp /opt/mitos-mcp
+getent hosts mitos.nomothiki.com          # on the VPS
+# from anywhere: nslookup mitos.nomothiki.com 1.1.1.1   (and 8.8.8.8)
+```
+
+**Propagation gotcha:** public resolvers cache. Google `8.8.8.8` in particular held
+the old value and Claude resolves through it — if Claude says "Couldn't reach the
+MCP server," it's almost always stale DNS. Force-flush at <https://dns.google/cache>
+(enter the hostname, type A, Flush), then retry. Cloudflare/Quad9/OpenDNS updated
+quickly; the authoritative NS (`*.dns-parking.com`) is correct immediately.
+
+---
+
+## Step 3 — Get the code + run the container
+
+The repo is public, so no auth is needed to clone:
+
+```bash
+cd /opt
+git clone https://github.com/shlaxim/mitos-mcp.git
 cd /opt/mitos-mcp
 ```
 
-> Alternatives: (a) create a fine-grained Personal Access Token with read access and
-> `git clone https://<TOKEN>@github.com/shlaxim/mitos-mcp.git /opt/mitos-mcp`; or
-> (b) make the repo public (it contains no secrets) and `git clone` plainly.
-
----
-
-## Step 5 — Run the container
-
-Create the env file (the token is read by docker compose; `.env` is gitignored so it is never committed):
+Create the env file (token read by docker compose; `.env` is gitignored):
 
 ```bash
-echo 'MITOS_MCP_AUTH_TOKEN=<YOUR_TOKEN>' > /opt/mitos-mcp/.env
-chmod 600 /opt/mitos-mcp/.env
+echo 'MITOS_MCP_AUTH_TOKEN=<YOUR_TOKEN>' > .env
+chmod 600 .env
 docker compose up -d --build
 ```
 
-Verify locally on the VPS (the port is bound to 127.0.0.1 only):
+`docker-compose.yml` binds the port to `127.0.0.1:8743` only (nginx fronts it).
+Verify on the box:
 
 ```bash
-curl -s http://127.0.0.1:8743/health         # -> {"status":"ok"}
-curl -s -X POST http://127.0.0.1:8743/mcp \
-  -H "Authorization: Bearer <YOUR_TOKEN>" \
+docker compose ps
+curl -s http://127.0.0.1:8743/health; echo      # -> {"status":"ok"}
+```
+
+---
+
+## Step 4 — Add an nginx server block (beside the existing sites)
+
+Do **not** install or replace nginx — the system nginx already serves other
+domains. Just add one site. `nginx.conf` includes both `conf.d/*.conf` and
+`sites-enabled/*`. Build the file with short lines (paste-safe):
+
+```bash
+F=/etc/nginx/sites-available/mitos
+echo 'server {' > $F
+echo 'listen 80;' >> $F
+echo 'server_name mitos.nomothiki.com;' >> $F
+echo 'location / {' >> $F
+echo 'proxy_pass http://127.0.0.1:8743;' >> $F
+echo 'proxy_http_version 1.1;' >> $F
+echo 'proxy_set_header Host $host;' >> $F
+echo 'proxy_set_header X-Real-IP $remote_addr;' >> $F
+echo 'proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;' >> $F
+echo 'proxy_set_header X-Forwarded-Proto $scheme;' >> $F
+echo 'proxy_buffering off;' >> $F
+echo 'proxy_read_timeout 300s;' >> $F
+echo 'proxy_send_timeout 300s;' >> $F
+echo '}' >> $F
+echo '}' >> $F
+```
+
+Activate, test, reload:
+
+```bash
+ln -sf $F /etc/nginx/sites-enabled/mitos
+nginx -t && systemctl reload nginx
+```
+
+Verify the proxy works locally for that host (bypasses any stale DNS):
+
+```bash
+curl -s -H 'Host: mitos.nomothiki.com' http://127.0.0.1/health; echo   # -> {"status":"ok"}
+```
+
+---
+
+## Step 5 — HTTPS certificate (certbot)
+
+This box has **apt** certbot (`/usr/bin/certbot`) but the nginx plugin wasn't
+installed. Install it, then issue the cert (certbot rewrites the `mitos` block to
+add HTTPS + an HTTP→HTTPS redirect):
+
+```bash
+apt-get install -y python3-certbot-nginx
+certbot --nginx -d mitos.nomothiki.com --redirect --agree-tos -m <YOUR_EMAIL> -n
+```
+
+certbot validates over port 80 using public DNS, so DNS (Step 2) must point at the
+real IP first. Verify (the `--resolve` avoids the VPS's own stale DNS cache):
+
+```bash
+curl -s --resolve mitos.nomothiki.com:443:127.0.0.1 https://mitos.nomothiki.com/health; echo
+```
+
+Firewall: if ufw is on, ensure `Nginx Full` (80+443) is allowed; never expose 8743.
+
+---
+
+## Step 6 — Auth for Claude connectors (path secret)
+
+Claude's custom connectors (incl. Claude for Word) only offer **OAuth or no-auth** —
+there is **no field for an `Authorization: Bearer` header**. The server therefore
+also accepts the token as a **URL path secret**: `POST /mcp/:secret` (constant-time
+checked), in addition to the header. No extra config needed — it's in the code.
+
+**Connector setup in Claude:**
+- URL: `https://mitos.nomothiki.com/mcp/<YOUR_TOKEN>`
+- OAuth Client ID / Secret: **leave blank**
+
+Treat that URL as a password. The header form (`Authorization: Bearer <token>` on
+`/mcp`) still works for curl/CLI/tests.
+
+External smoke (from any machine):
+
+```bash
+curl -s -X POST "https://mitos.nomothiki.com/mcp/<YOUR_TOKEN>" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}'   # -> lists 5 tools
+  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}'
+# -> lists the 5 tools; a wrong secret returns HTTP 401
 ```
-
-Logs / lifecycle:
-
-```bash
-docker compose logs -f          # follow logs
-docker compose restart          # restart
-docker compose pull && docker compose up -d --build   # after a code update (git pull first)
-```
-
----
-
-## Step 6 — nginx reverse proxy + HTTPS (Let's Encrypt)
-
-```bash
-apt-get install -y nginx certbot python3-certbot-nginx
-
-# Take the example config, set the real hostname, install it
-sed 's/mitos\.example\.com/mitos.nomothiki.com/g' /opt/mitos-mcp/nginx.conf.example \
-  > /etc/nginx/sites-available/mitos
-ln -sf /etc/nginx/sites-available/mitos /etc/nginx/sites-enabled/mitos
-rm -f /etc/nginx/sites-enabled/default
-
-# certbot needs port 80 reachable and DNS already pointing here (Step 1).
-# It will obtain the cert and rewrite the config for HTTPS automatically.
-certbot --nginx -d mitos.nomothiki.com --redirect --agree-tos -m you@example.com -n
-
-nginx -t && systemctl reload nginx
-systemctl enable nginx
-```
-
-> The `nginx.conf.example` already references the Let's Encrypt cert paths
-> (`/etc/letsencrypt/live/mitos.nomothiki.com/...`), has `proxy_buffering off` and
-> 300s timeouts for streamable HTTP, and proxies to `127.0.0.1:8743`. If certbot's
-> auto-edit and the example conflict, let certbot's version win — the proxy
-> `location /` block is the part that must remain.
-
----
-
-## Step 7 — Firewall (if ufw is enabled)
-
-```bash
-ufw allow OpenSSH
-ufw allow 'Nginx Full'      # opens 80 + 443
-ufw enable
-```
-
-Do **not** open 8743 — it stays localhost-only.
-
----
-
-## Step 8 — Verify from the public internet (from your PC)
-
-```powershell
-curl https://mitos.nomothiki.com/health
-# {"status":"ok"}
-```
-
-Optionally run the repo's smoke test against the live host from your PC:
-
-```powershell
-# from D:\mitos-mcp
-$env:MITOS_MCP_AUTH_TOKEN="<YOUR_TOKEN>"; $env:PORT="443"   # smoke.mjs targets 127.0.0.1; for remote, prefer the curl checks above
-```
-
-(The bundled `npm run smoke` targets `127.0.0.1`; for a remote check use the `curl`
-commands above, or run smoke on the VPS itself.)
-
----
-
-## Step 9 — Connect from Claude for Word
-
-Add a custom connector:
-- **URL:** `https://mitos.nomothiki.com/mcp`
-- **Header:** `Authorization: Bearer <YOUR_TOKEN>`
-
-The 5 tools (`search_procedures`, `get_procedure`, `list_categories`,
-`list_procedures_by_category`, `get_legal_basis_articles`) then appear in Claude.
 
 ---
 
@@ -181,3 +187,6 @@ cd /opt/mitos-mcp
 git pull
 docker compose up -d --build
 ```
+
+The Let's Encrypt cert auto-renews via certbot's systemd timer
+(`systemctl list-timers | grep certbot`).
