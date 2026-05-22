@@ -101,7 +101,8 @@ Connected and working in Claude for Word (shows all 5 tools).
   addition to `Authorization: Bearer`. Connector config: URL = `https://mitos.nomothiki.com/mcp/<token>`,
   OAuth fields left blank. The `<token>` was generated 2026-05-22, stored by user, lives in VPS `.env`.
 - Update flow: `cd /opt/mitos-mcp && git pull && docker compose up -d --build`.
-- Runbook: **`DEPLOY.md`** (note: it predates the path-secret + the IP correction).
+- Runbook: **`DEPLOY.md`** — rewritten 2026-05-22 to match the actual deploy (shared system
+  nginx, real-IP discovery, Browser terminal, public-repo clone, path-secret connector auth).
 
 ## VERIFIED `process_rules` shape (LIVE 2026-05-22, 264 rules across 58 procedures)
 Each rule in `metadata.process_rules[]` is flat with these keys:
