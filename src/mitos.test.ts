@@ -27,3 +27,26 @@ test("formatDuration returns undefined for undefined input", () => {
 test("formatDuration returns the raw string when unparseable", () => {
   assert.equal(formatDuration("not-a-duration"), "not-a-duration");
 });
+
+import { pool } from "./mitos.js";
+
+test("pool returns results in input order", async () => {
+  const tasks = [10, 5, 1].map((ms, i) => () =>
+    new Promise<number>((r) => setTimeout(() => r(i), ms))
+  );
+  const results = await pool(tasks, 2);
+  assert.deepEqual(
+    results.map((r) => (r.status === "fulfilled" ? r.value : null)),
+    [0, 1, 2]
+  );
+});
+
+test("pool isolates rejections per task", async () => {
+  const tasks = [
+    () => Promise.resolve("ok"),
+    () => Promise.reject(new Error("boom")),
+  ];
+  const results = await pool(tasks, 2);
+  assert.equal(results[0].status, "fulfilled");
+  assert.equal(results[1].status, "rejected");
+});

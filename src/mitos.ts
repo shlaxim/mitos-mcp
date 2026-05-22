@@ -26,3 +26,26 @@ export function formatDuration(iso?: string): string | undefined {
   add(seconds, "second");
   return parts.length ? parts.join(", ") : iso;
 }
+
+/** Run async tasks with a maximum concurrency; results preserve input order. */
+export async function pool<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let next = 0;
+  async function worker() {
+    while (next < tasks.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await tasks[i]() };
+      } catch (e) {
+        results[i] = { status: "rejected", reason: e };
+      }
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, tasks.length) }, worker)
+  );
+  return results;
+}
