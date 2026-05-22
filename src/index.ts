@@ -56,14 +56,6 @@ const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "100kb" }));
 
-app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
-  if (err && typeof err === "object" && (err as { type?: string }).type === "entity.parse.failed") {
-    res.status(400).json({ error: "Bad request" });
-    return;
-  }
-  next(err as Error);
-});
-
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
@@ -101,6 +93,16 @@ app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
       });
     }
   }
+});
+
+// Error-handling middleware: catches body-parser parse errors (malformed JSON)
+// raised by express.json() above. Conventional position — after routes.
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err && typeof err === "object" && (err as { type?: string }).type === "entity.parse.failed") {
+    res.status(400).json({ error: "Bad request" });
+    return;
+  }
+  next(err as Error);
 });
 
 app.listen(PORT, "0.0.0.0", () => {
