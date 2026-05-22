@@ -1,6 +1,6 @@
 # mitos-mcp — Progress
 
-_Last updated: 2026-05-22_
+_Last updated: 2026-05-22 (rewrite complete)_
 
 ## Goal
 
@@ -72,10 +72,23 @@ API → deploy to VPS → connect from Claude for Word.
 ## NEXT STEPS (resume here)
 1. ~~Relaunch Claude Code from `D:\mitos-mcp`.~~ ✓ done — cwd is `D:\mitos-mcp`.
 2. ~~Verify `get_legal_basis_articles` field shapes against live API.~~ ✓ done 2026-05-22 (see below).
-3. Write spec → `docs/superpowers/specs/2026-05-22-mitos-mcp-fullstack-design.md` (brainstorming flow).
-4. Write implementation plan (writing-plans skill).
-5. Implement rewrite (index.ts / mitos.ts / tools.ts) + deployment artifacts.
-6. Build + local smoke test → VPS deploy.
+3. ~~Write spec~~ ✓ done → `docs/superpowers/specs/2026-05-22-mitos-mcp-fullstack-design.md`.
+4. ~~Write implementation plan~~ ✓ done → `docs/superpowers/plans/2026-05-22-mitos-mcp-http-rewrite.md`.
+5. ~~Implement rewrite (index.ts / mitos.ts / tools.ts) + deployment artifacts.~~ ✓ done 2026-05-22.
+   - 3 source modules (src/mitos.ts, src/tools.ts, src/index.ts) + 2 test files.
+   - 5 tools: search_procedures, get_procedure, list_categories, list_procedures_by_category, get_legal_basis_articles.
+   - Stateless Streamable HTTP on port 8743, fail-closed bearer auth.
+   - Deployment artifacts: Dockerfile (multi-stage node:20-alpine), docker-compose.yml, nginx.conf.example, README.md.
+6. ~~Build + local smoke test.~~ ✓ done 2026-05-22.
+   - `npx tsc --noEmit` → clean (no errors).
+   - `npm run build` → dist/ compiled successfully.
+   - `npm test` → **13/13 unit tests pass** (normalize, formatDuration, pool, extractLegalBasis, filterByTitle).
+   - `npm run smoke` → **6/6 live smoke checks pass** (health, 401 rejection, tools/list, search_procedures, get_legal_basis_articles ×2).
+
+**Remaining open item:** VPS deploy + connect from Claude for Word.
+- Clone repo on Ubuntu/Hostinger VPS, `docker compose up -d --build`.
+- Install nginx + certbot, copy nginx.conf.example, run `certbot --nginx -d mitos.<domain>`.
+- Add custom connector in Claude for Word: URL `https://mitos.<domain>/mcp`, header `Authorization: Bearer <token>`.
 
 ## VERIFIED `process_rules` shape (LIVE 2026-05-22, 264 rules across 58 procedures)
 Each rule in `metadata.process_rules[]` is flat with these keys:
