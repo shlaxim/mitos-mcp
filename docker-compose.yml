@@ -3,7 +3,10 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "8743:8743"
+      # Bind to localhost only — nginx reverse-proxies over HTTPS. The plain-HTTP
+      # port is never exposed to the internet. For local-only testing without nginx,
+      # change to "8743:8743".
+      - "127.0.0.1:8743:8743"
     environment:
       MITOS_MCP_AUTH_TOKEN: ${MITOS_MCP_AUTH_TOKEN:?set MITOS_MCP_AUTH_TOKEN}
       PORT: "8743"
