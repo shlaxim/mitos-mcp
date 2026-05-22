@@ -1,4 +1,4 @@
-import type { ExtendedResponse, ServiceTitle } from "./mitos.js";
+import { normalize, type ExtendedResponse, type ServiceListItem, type ServiceTitle } from "./mitos.js";
 
 export interface LegalRule {
   rule_type?: string;
@@ -52,4 +52,21 @@ export function extractLegalBasis(id: string, ext: ExtendedResponse): LegalBasis
     }
   }
   return { procedure_id: id, title, rules };
+}
+
+/** Pure title filter — accent-insensitive substring match in the chosen language(s). */
+export function filterByTitle(
+  services: ServiceListItem[],
+  query: string,
+  language: string
+): ServiceListItem[] {
+  const q = normalize(query.trim());
+  const lang = language.toLowerCase();
+  return services.filter((svc) => {
+    const el = normalize(svc.title.el ?? "");
+    const en = normalize(svc.title.en ?? "");
+    if (lang === "en") return en.includes(q);
+    if (lang === "el") return el.includes(q);
+    return el.includes(q) || en.includes(q);
+  });
 }

@@ -54,3 +54,23 @@ test("extractLegalBasis handles missing process_rules", () => {
   const out = extractLegalBasis("1", empty);
   assert.deepEqual(out.rules, []);
 });
+
+import { filterByTitle } from "./tools.js";
+import type { ServiceListItem } from "./mitos.js";
+
+const services: ServiceListItem[] = [
+  { id: "1", title: { el: "Φορολογία πολιτών", en: "Citizen taxation" }, ns: "", last_updated: "" },
+  { id: "2", title: { el: "Άδεια οδήγησης", en: "Driving licence" }, ns: "", last_updated: "" },
+];
+
+test("filterByTitle matches Greek accent-insensitively", () => {
+  assert.deepEqual(filterByTitle(services, "φορολογια", "el").map((s) => s.id), ["1"]);
+});
+
+test("filterByTitle matches English when language=en", () => {
+  assert.deepEqual(filterByTitle(services, "driving", "en").map((s) => s.id), ["2"]);
+});
+
+test("filterByTitle searches both languages by default", () => {
+  assert.deepEqual(filterByTitle(services, "licence", "both").map((s) => s.id), ["2"]);
+});
