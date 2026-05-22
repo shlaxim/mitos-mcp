@@ -86,14 +86,22 @@ API → deploy to VPS → connect from Claude for Word.
    - `npm run smoke` → **6/6 live smoke checks pass** (health, 401 rejection, tools/list, search_procedures, get_legal_basis_articles ×2).
    - Merged to `master` 2026-05-22 as commit `341be7a` (`feat/http-rewrite`, 16 commits, branch deleted). Re-verified on merged master: 13/13 tests + 6/6 smoke.
 
-**Remaining open item:** VPS deploy + connect from Claude for Word.
-- GitHub: `https://github.com/shlaxim/mitos-mcp` (private, pushed 2026-05-22).
-- Domain: `nomothiki.com` (Hostinger). Target hostname: **mitos.nomothiki.com**.
-- Full tailored runbook: **`DEPLOY.md`** (DNS A record → VPS IP, Docker install, private-repo
-  clone via `gh`, `.env` with token, `docker compose up -d --build`, nginx + certbot, connector).
-- Hardening: docker-compose binds 8743 to `127.0.0.1` only (nginx proxies over HTTPS).
-- Auth token was generated 2026-05-22 (stored by user, NOT in repo — lives in VPS `.env`).
-- Connector: URL `https://mitos.nomothiki.com/mcp`, header `Authorization: Bearer <token>`.
+## DEPLOYED & LIVE (2026-05-22) ✅
+Connected and working in Claude for Word (shows all 5 tools).
+- **Live URL:** `https://mitos.nomothiki.com/mcp/<token>` (path-secret auth — see below).
+- GitHub: `https://github.com/shlaxim/mitos-mcp` (**public** — no secrets in repo; simplifies VPS clone/pull).
+- VPS: Hostinger Ubuntu 24.04, **real public IP `76.13.155.182`** (NOT 2.57.91.91 — that was a
+  mis-read parking IP that cost us a long debug; nomothiki.cloud also resolves here).
+- SSH port 22 is blocked from outside → use Hostinger **Browser terminal**. Code at `/opt/mitos-mcp`.
+- nginx (system, on the VPS — already served `nomothiki.cloud`/greek-legal-corrector) reverse-proxies
+  `mitos.nomothiki.com` → `127.0.0.1:8743`; Let's Encrypt cert via certbot `--nginx`.
+- docker-compose binds 8743 to `127.0.0.1` only.
+- **Auth:** Claude connectors only support OAuth or no-auth (no custom header field). So the server
+  now also accepts the token as a URL **path secret** `POST /mcp/:secret` (commit e108a79), in
+  addition to `Authorization: Bearer`. Connector config: URL = `https://mitos.nomothiki.com/mcp/<token>`,
+  OAuth fields left blank. The `<token>` was generated 2026-05-22, stored by user, lives in VPS `.env`.
+- Update flow: `cd /opt/mitos-mcp && git pull && docker compose up -d --build`.
+- Runbook: **`DEPLOY.md`** (note: it predates the path-secret + the IP correction).
 
 ## VERIFIED `process_rules` shape (LIVE 2026-05-22, 264 rules across 58 procedures)
 Each rule in `metadata.process_rules[]` is flat with these keys:
