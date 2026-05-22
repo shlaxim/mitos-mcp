@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalize } from "./mitos.js";
+import { normalize, formatDuration, pool } from "./mitos.js";
 
 test("normalize strips Greek accents and lowercases", () => {
   assert.equal(normalize("Φορολογία"), normalize("φορολογια"));
@@ -10,8 +10,6 @@ test("normalize strips Greek accents and lowercases", () => {
 test("normalize handles dialytika", () => {
   assert.equal(normalize("προϊόν"), normalize("προιον"));
 });
-
-import { formatDuration } from "./mitos.js";
 
 test("formatDuration parses ISO 8601 durations", () => {
   assert.equal(formatDuration("P3Y"), "3 years");
@@ -27,8 +25,6 @@ test("formatDuration returns undefined for undefined input", () => {
 test("formatDuration returns the raw string when unparseable", () => {
   assert.equal(formatDuration("not-a-duration"), "not-a-duration");
 });
-
-import { pool } from "./mitos.js";
 
 test("pool returns results in input order", async () => {
   const tasks = [10, 5, 1].map((ms, i) => () =>
