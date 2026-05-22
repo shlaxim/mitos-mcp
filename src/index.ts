@@ -24,12 +24,18 @@ if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   process.exit(1);
 }
 
+/** Constant-time string comparison. */
+function safeEqual(provided: string, expected: string): boolean {
+  const p = Buffer.from(provided);
+  const e = Buffer.from(expected);
+  if (p.length !== e.length) return false;
+  return timingSafeEqual(p, e);
+}
+
+/** Accept the token from an `Authorization: Bearer <token>` header. */
 function tokenValid(header: string | undefined): boolean {
   if (!header?.startsWith("Bearer ")) return false;
-  const provided = Buffer.from(header.slice(7));
-  const expected = Buffer.from(TOKEN as string);
-  if (provided.length !== expected.length) return false;
-  return timingSafeEqual(provided, expected);
+  return safeEqual(header.slice(7), TOKEN as string);
 }
 
 /** Build a fresh MCP server instance (no shared per-request state). */
@@ -60,8 +66,15 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
 
+// Accept the token either from the Authorization header (for API/CLI clients)
+// or as a URL path secret `/mcp/<token>` (for connectors that can't send a
+// custom header, e.g. Claude for Word, which only offers OAuth or no-auth).
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!tokenValid(req.headers.authorization)) {
+  const secret = req.params.secret;
+  const ok =
+    tokenValid(req.headers.authorization) ||
+    (typeof secret === "string" && safeEqual(secret, TOKEN as string));
+  if (!ok) {
     res.status(401).json({
       jsonrpc: "2.0",
       error: { code: -32001, message: "Unauthorized" },
@@ -73,7 +86,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
 }
 
 // Stateless Streamable HTTP: a fresh transport + server per request.
-app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
+async function handleMcp(req: Request, res: Response) {
   const server = buildServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
@@ -93,7 +106,10 @@ app.post("/mcp", requireAuth, async (req: Request, res: Response) => {
       });
     }
   }
-});
+}
+
+app.post("/mcp", requireAuth, handleMcp);
+app.post("/mcp/:secret", requireAuth, handleMcp);
 
 // Error-handling middleware: catches body-parser parse errors (malformed JSON)
 // raised by express.json() above. Conventional position — after routes.
